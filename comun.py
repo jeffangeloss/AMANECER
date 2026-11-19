@@ -97,8 +97,8 @@ def base_drive():
 
     pat = os.path.expanduser("~/Library/CloudStorage/GoogleDrive-*/Mi unidad")
     hallados = sorted(glob.glob(pat))
-    if not hallados:
-        raise SystemExit("No encuentro Google Drive montado. Usa --local o --destino RUTA")
+    if not hallados:  # sin Google Drive para escritorio: carpeta en el inicio
+        return Path.home() / "Blackboard ULIMA"
     return Path(hallados[0]) / "Blackboard ULIMA"
 
 

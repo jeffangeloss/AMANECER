@@ -108,6 +108,9 @@ if not a.sin_materiales:
 # 3) grabaciones: catalogo fresco (sin ventana) y descarga de los MP4 nuevos
 if not a.sin_grabaciones:
     paso("3/4 Catalogo de grabaciones de Zoom")
+    # Solo se bajan los cursos revisados en ESTA corrida: el catalogo
+    # conserva filas de corridas anteriores (otros semestres o filtros).
+    desde = time.strftime("%Y-%m-%d %H:%M:%S")
     cod, txt = correr("zoom.py", *comunes)
     cursos = int((re.search(r"(\d+) cursos con Zoom", txt) or [0, 0])[1])
     ok = len(re.findall(r"^\s+\d+ grabaciones$", txt, re.M))
@@ -120,7 +123,8 @@ if not a.sin_grabaciones:
         problemas.append("catalogo de grabaciones")
     else:
         paso("3/4 Descarga de grabaciones")
-        cod, txt = correr("zoom.py", "--descargar", *comunes, *destino)
+        cod, txt = correr("zoom.py", "--descargar", "--desde", desde,
+                         *comunes, *destino)
         if cod != 0 or "FALLA" in txt:
             problemas.append("descarga de grabaciones (hay fallas, vuelve a correr)")
 

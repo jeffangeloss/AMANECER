@@ -325,7 +325,12 @@ def escribir(filas, vistos):
     --curso borraria del catalogo los cursos que no se procesaron."""
     SALIDA.mkdir(exist_ok=True)
     campos = ["curso", "inicio", "tema", "duracion", "bytes", "mb",
-              "archivos", "mp4", "meetingId", "error"]
+              "archivos", "mp4", "meetingId", "error", "visto"]
+    # Marca de cuando se catalogo cada fila: las que se conservan de
+    # corridas anteriores quedan con su marca vieja, y --desde las filtra.
+    ahora = time.strftime("%Y-%m-%d %H:%M:%S")
+    for f in filas:
+        f["visto"] = ahora
     p = SALIDA / "zoom.csv"
     if p.exists():
         with p.open(encoding="utf-8-sig") as fh:
@@ -426,9 +431,12 @@ def bajar(filas, destino, local, maximo):
         # encoding explicito: yt-dlp escribe en cp1252 en Windows y sin esto el
         # hilo lector de subprocess muere con UnicodeDecodeError, dejando la
         # descarga como "exitosa" sin que exista el archivo.
-        r = subprocess.run(["yt-dlp", "-o", str(salida), f["mp4"]],
-                           capture_output=True, text=True,
-                           encoding="utf-8", errors="replace")
+        try:
+            r = subprocess.run(["yt-dlp", "-o", str(salida), f["mp4"]],
+                               capture_output=True, text=True,
+                               encoding="utf-8", errors="replace")
+        except FileNotFoundError:  # sin yt-dlp instalado: directo a la API
+            r = subprocess.CompletedProcess([], 1, "", "yt-dlp no instalado")
         err = (r.stderr or "").strip()
         if r.returncode != 0:
             try:
@@ -451,6 +459,8 @@ ap.add_argument("--descargar", action="store_true", help="bajar los MP4 (por def
 ap.add_argument("--max", type=int, default=None, help="cortar despues de N grabaciones")
 ap.add_argument("--destino", default=None, help="carpeta base de descarga")
 ap.add_argument("--local", action="store_true", help="bajar a ./descargas")
+ap.add_argument("--desde", default="",
+                help="con --descargar, solo filas catalogadas desde 'AAAA-MM-DD HH:MM:SS'")
 ap.add_argument("--ver", action="store_true", help="mostrar el navegador (para depurar)")
 ap.add_argument("--login", action="store_true",
                 help="abre ventana, te logueas y cataloga en la misma corrida")
