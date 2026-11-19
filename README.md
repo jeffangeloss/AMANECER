@@ -73,16 +73,51 @@ Las opciones se agregan al final del comando, por ejemplo `.\bb-todo.ps1 --curso
 
 ## Dónde quedan los archivos
 
-Sin `--destino`, todo va a una carpeta llamada `Blackboard ULIMA`. En Windows se crea en el disco
-con más espacio libre que no sea C:, o en la carpeta del usuario si no hay otro disco. En macOS va a
-«Mi unidad» de Google Drive para escritorio si está instalado, y si no, a la carpeta del usuario.
+### Banco Integral compartido
 
-Dentro, cada curso tiene su carpeta con la misma estructura de Blackboard, y sus grabaciones van en
-`Grabaciones` con nombres como `S3.Clase 7 - 09.09.26.mp4`, donde S3 es la semana del curso y 7 el
-número de la clase.
+El destino por defecto es el Banco Integral compartido en Google Drive, dentro de la carpeta del
+semestre que indica Blackboard, por ejemplo `[2026-2] NOCHE NÁUFRAGA`. Cada curso queda así.
 
-Para fijar otra carpeta de forma permanente se agrega una línea `BB_DESTINO=RUTA` al archivo `.env`
-que crea el primer inicio de sesión.
+```text
+[E.P.L.A.] Banco Integral CIS,CII & DEMÁS/
+  [2026-2] NOCHE NÁUFRAGA/
+    [2026-2] DEVOPS/
+      [Archivos - 1051] NOMBRE DEL PROFESOR/      (misma estructura de Blackboard)
+      [Grabaciones - 1051] NOMBRE DEL PROFESOR/   S1.Clase 1 - 27.08.26.mp4 ...
+```
+
+La sección y el profesor separan las carpetas, de modo que dos personas en secciones distintas no
+mezclan su material y dos personas en la misma sección comparten una sola copia. El nombre completo
+del curso sale de `nombres_cursos.json`, y un curso que no figura ahí usa la abreviatura de
+Blackboard. Para agregar un curso basta con sumar una línea a ese archivo.
+
+Para usar el Banco hacen falta tres condiciones.
+
+1. Google Drive para escritorio instalado y con sesión iniciada en la cuenta que tiene acceso al
+   Banco.
+2. Un acceso directo del Banco en «Mi unidad». En drive.google.com, en «Compartido conmigo», se
+   hace clic derecho sobre `[E.P.L.A.] Banco Integral CIS,CII & DEMÁS` y se elige «Organizar» y
+   «Agregar acceso directo», con «Mi unidad» como destino.
+3. Permiso de editor sobre la carpeta del semestre. Con permiso de lector la carpeta se ve, pero no
+   admite archivos nuevos.
+
+El comando prueba al inicio si puede escribir en el Banco. Si no lo encuentra o no tiene permiso, lo
+avisa y guarda todo en la carpeta personal, sin detenerse. Si la carpeta del Banco tiene otra
+ubicación, se agrega una línea `BB_BANCO=RUTA` al archivo `.env` con la ruta completa de
+`[E.P.L.A.] Banco Integral CIS,CII & DEMÁS`.
+
+### Carpeta personal
+
+Los cursos sin semestre, como los de inducción o los exámenes de inglés, y todo lo que no puede ir
+al Banco, van a una carpeta llamada `Blackboard ULIMA`. En Windows se crea en el disco con más
+espacio libre que no sea C:, o en la carpeta del usuario si no hay otro disco. En macOS va a «Mi
+unidad» de Google Drive para escritorio si está instalado, y si no, a la carpeta del usuario. Ahí
+cada curso tiene su carpeta con la estructura de Blackboard y sus grabaciones en `Grabaciones`.
+
+Las grabaciones se nombran como `S3.Clase 7 - 09.09.26.mp4`, donde S3 es la semana del curso y 7 el
+número de la clase. Para fijar la carpeta personal se agrega una línea `BB_DESTINO=RUTA` al archivo
+`.env` que crea el primer inicio de sesión, y la opción `--destino RUTA` manda todo a esa ruta,
+Banco incluido.
 
 ## Seguridad
 

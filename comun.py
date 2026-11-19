@@ -128,8 +128,156 @@ def _seccion(curso):
     return curso.rsplit("/", 1)[-1].strip() if "/" in curso else ""
 
 
+# --- Banco Integral compartido en Google Drive ------------------------------
+# Destino por defecto del material de los cursos de la ULima:
+#   <Banco>/<[AAAA-S] apodo>/<[AAAA-S] NOMBRE COMPLETO>/[Archivos - seccion] Profesor/
+# El semestre sale del codigo del curso (PROPUESTA_20262_...), el profesor de
+# la API de Blackboard y el nombre completo de nombres_cursos.json.
+BANCO = "[E.P.L.A.] Banco Integral CIS,CII & DEMÁS"
+_TERMINO = re.compile(r"_(20\d\d)([0-2])_")
+
+
+def semestre_de(course_id):
+    """'PROPUESTA_20262_650084_1051' -> '2026-2'; None si no es de un semestre."""
+    m = _TERMINO.search(course_id or "")
+    return f"{m.group(1)}-{m.group(2)}" if m else None
+
+
+def raiz_banco():
+    """Carpeta del Banco en el Drive de esta maquina, o None.
+
+    BB_BANCO en .env manda. Si no, se busca en Google Drive para escritorio
+    (en Windows, cualquier letra con 'My Drive' o 'Mi unidad'; en macOS,
+    ~/Library/CloudStorage). Para que aparezca, la carpeta compartida tiene
+    que tener un acceso directo en 'Mi unidad'.
+    """
+    env = os.getenv("BB_BANCO", "").strip()
+    if env:
+        p = Path(os.path.expanduser(env))
+        return p if p.is_dir() else None
+    unidades = ("My Drive", "Mi unidad")
+    if WINDOWS:
+        cands = [Path(f"{l}:\\") / u / BANCO for l in "DEFGHIJKLMNOPQRSTUVWXYZ" for u in unidades]
+    else:
+        cands = [Path(g) / BANCO for u in unidades for g in sorted(glob.glob(
+            os.path.expanduser(f"~/Library/CloudStorage/GoogleDrive-*/{u}")))]
+    for c in cands:
+        try:
+            if c.is_dir():
+                return c
+        except OSError:
+            pass
+    return None
+
+
+def carpeta_semestre(sem):
+    """Carpeta '[2026-2] <apodo>' del Banco. No se crea: el apodo lo pone el dueno."""
+    raiz = raiz_banco()
+    if not raiz or not sem:
+        return None
+    hallados = sorted(d for d in raiz.glob(f"[[]{sem}[]]*") if d.is_dir())
+    if not hallados or not _escribible(hallados[0]):
+        return None
+    return hallados[0]
+
+
+_PRUEBAS = {}
+
+
+def _escribible(carpeta):
+    """True si esta cuenta puede crear archivos ahi. Quien tiene la carpeta
+    compartida como lector la ve en el Drive pero no puede subir, y
+    os.access no lo detecta en Drive para escritorio: se prueba creando un
+    archivo vacio propio y quitandolo enseguida. Una vez por corrida."""
+    if carpeta not in _PRUEBAS:
+        prueba = carpeta / f".amanecer-prueba-{os.getpid()}"
+        try:
+            prueba.write_bytes(b"")
+            prueba.unlink()
+            _PRUEBAS[carpeta] = True
+        except OSError:
+            _PRUEBAS[carpeta] = False
+            print(f"  (sin permiso para subir a {carpeta.name}: uso la carpeta personal)")
+    return _PRUEBAS[carpeta]
+
+
+def _abreviatura(curso):
+    """'3_SEM.INVES.I / 958' -> 'SEM.INVES.I'."""
+    base = curso.rsplit("/", 1)[0].strip() if "/" in curso else curso.strip()
+    return unicodedata.normalize("NFC", re.sub(r"^\d+_", "", base))
+
+
+def nombre_completo(curso):
+    """Nombre del curso para la carpeta del Banco. Sale de nombres_cursos.json
+    (va en el repo, sin datos personales); si no esta, la abreviatura."""
+    p = Path(__file__).with_name("nombres_cursos.json")
+    try:
+        nombres = json.loads(p.read_text(encoding="utf-8"))
+    except Exception:
+        nombres = {}
+    nombres = {unicodedata.normalize("NFC", k): v for k, v in nombres.items()}
+    ab = _abreviatura(curso)
+    return nombres.get(ab) or ab
+
+
+def _cache_cursos():
+    return rutas_perfil(os.getenv("BB_PERFIL", ""))["salida"] / "cursos.json"
+
+
+def leer_cursos():
+    try:
+        return json.loads(_cache_cursos().read_text(encoding="utf-8"))
+    except Exception:
+        return {}
+
+
+def registrar_cursos(sesion, host, cursos):
+    """Guarda semestre y profesor de cada curso (lista de objetos `course`
+    de la API) en salida/cursos.json, para que descargar, zoom y estado
+    armen la misma ruta del Banco sin volver a preguntar."""
+    cache = leer_cursos()
+    for c in cursos:
+        nombre = c.get("name") or c.get("courseId") or ""
+        info = {"semestre": semestre_de(c.get("courseId")), "profesor": ""}
+        try:
+            r = sesion.get(f"{host}/learn/api/public/v1/courses/{c['id']}/users",
+                           params={"expand": "user", "role": "Instructor"}, timeout=30)
+            if r.status_code == 200:
+                for u in r.json().get("results", []):
+                    n = (u.get("user") or {}).get("name") or {}
+                    prof = f"{n.get('given', '')} {n.get('family', '')}".strip()
+                    if prof:
+                        info["profesor"] = prof
+                        break
+        except Exception:
+            pass
+        cache[nombre] = info
+    f = _cache_cursos()
+    f.parent.mkdir(exist_ok=True)
+    f.write_text(json.dumps(cache, ensure_ascii=False, indent=1), encoding="utf-8")
+
+
 def _carpeta_banco(curso, etiqueta):
     """Carpeta del Banco para un curso, separando por tipo.
+
+    Primero el Banco compartido, con el semestre que dice Blackboard. Si el
+    curso no tiene semestre (cursos de induccion, examenes de ingles) o este
+    Drive no tiene el Banco, se usa banco.json (configuracion vieja del
+    dueno) y, si tampoco, el destino personal.
+    """
+    info = leer_cursos().get(curso) or {}
+    sem_dir = carpeta_semestre(info.get("semestre"))
+    if sem_dir:
+        banco = cargar_banco() or {}
+        c = banco.get("cursos", {}).get(curso) or {}
+        prof = (info.get("profesor") or c.get("profesor") or "").strip()
+        curso_dir = sem_dir / sanear(f"[{info['semestre']}] {nombre_completo(curso)}")
+        return curso_dir / sanear(f"[{etiqueta} - {_seccion(curso)}] {prof}")
+    return _carpeta_banco_json(curso, etiqueta)
+
+
+def _carpeta_banco_json(curso, etiqueta):
+    """Carpeta del Banco segun banco.json (semestre fijo).
 
     etiqueta = 'Archivos' o 'Grabaciones'. Sigue la convencion del usuario:
       <banco>/<semestre>/<[pref] NOMBRE>/[etiqueta - seccion] Profesor/

@@ -94,13 +94,14 @@ if cod != 0:
 # 2) materiales: inventario fresco (con tamanos, para saltar lo ya bajado) y descarga
 if not a.sin_materiales:
     paso("2/4 Inventario de materiales")
+    desde_m = time.strftime("%Y-%m-%d %H:%M:%S")
     cod, _ = correr("descargar.py", "--inventario", *comunes)
     if cod != 0:
         problemas.append("inventario de materiales")
     else:
         paso("2/4 Descarga de materiales")
         extra = ["--max-mb", str(a.max_mb)] if a.max_mb else []
-        cod, txt = correr("descargar.py", *comunes, *destino, *extra)
+        cod, txt = correr("descargar.py", "--desde", desde_m, *comunes, *destino, *extra)
         m = re.search(r"(\d+) fallidos", txt)
         if cod != 0 or (m and int(m.group(1)) > 0):
             problemas.append("descarga de materiales (hay fallidos, vuelve a correr)")

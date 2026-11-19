@@ -1,6 +1,7 @@
 import os, re, csv, sys, time, json, html, argparse, requests
 from pathlib import Path
-from comun import sanear, destino_base, carpeta_archivos, cargar_perfil, rutas_perfil
+from comun import (sanear, destino_base, carpeta_archivos, cargar_perfil, rutas_perfil,
+                   registrar_cursos)
 
 # La consola de Windows usa cp1252 y revienta con acentos combinantes
 # (NFD) que vienen en algunos nombres de archivo de Blackboard.
@@ -167,6 +168,7 @@ def recolectar(cursos, con_tamanos):
                 "origen": "embebido" if url_directa else "adjunto",
                 "bytes": "",
                 "mb": "",
+                "visto": AHORA,  # --desde filtra las filas de corridas anteriores
             }
             if con_tamanos:
                 url = url_directa or firmar(pk, cid, aid)
@@ -324,7 +326,10 @@ ap.add_argument("--max-mb", type=float, default=None, help="omitir archivos mas 
 ap.add_argument("--destino", default=None, help="carpeta base de descarga")
 ap.add_argument("--local", action="store_true", help="bajar a ./descargas en vez de Google Drive")
 ap.add_argument("--curso", default="", help="filtrar por texto en el nombre del curso")
+ap.add_argument("--desde", default="",
+                help="solo filas inventariadas desde 'AAAA-MM-DD HH:MM:SS'")
 a = ap.parse_args()
+AHORA = time.strftime("%Y-%m-%d %H:%M:%S")
 
 if not HOST or not COOKIE:
     raise SystemExit("Falta BB_HOST o BB_COOKIE en .env")
@@ -334,12 +339,14 @@ if a.inventario:
     if not me:
         raise SystemExit("No autentico. Renueva la cookie.")
     UID = me["id"]
-    cursos = []
+    cursos, objs = [], []
     for m in paginar(f"/learn/api/v1/users/{UID}/memberships", expand="course"):
         c = m.get("course") or {}
         nom = c.get("name") or c.get("courseId") or ""
         if c.get("id") and (not a.curso or a.curso.lower() in nom.lower()):
             cursos.append((c["id"], nom))
+            objs.append(c)
+    registrar_cursos(s, HOST, objs)  # semestre y profesor, para la ruta del Banco
     print(f"{len(cursos)} cursos\n")
     filas = recolectar(cursos, not a.sin_tamanos)
     escribir_inventario(filas, {c[1] for c in cursos})
@@ -347,6 +354,8 @@ else:
     filas = leer_inventario()
     if a.curso:
         filas = [f for f in filas if a.curso.lower() in f["curso"].lower()]
+    if a.desde:
+        filas = [f for f in filas if (f.get("visto") or "") >= a.desde]
     tipos = {t.strip().lstrip(".").lower() for t in a.tipos.split(",") if t.strip()}
     base = destino_base(a.destino, a.local)
     print(f"{len(filas)} adjuntos en el inventario -> {base}\n")

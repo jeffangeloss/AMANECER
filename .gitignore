@@ -24,3 +24,4 @@ diff*.py
 ver*.py
 chk.py
 emb.py
+!nombres_cursos.json

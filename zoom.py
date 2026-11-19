@@ -12,7 +12,8 @@ frame, no en la pagina de Blackboard.
 import os, re, sys, csv, json, time, argparse, subprocess, requests
 from datetime import date, timedelta
 from pathlib import Path
-from comun import sanear, destino_base, carpeta_grabaciones, cargar_perfil, rutas_perfil
+from comun import (sanear, destino_base, carpeta_grabaciones, cargar_perfil, rutas_perfil,
+                   registrar_cursos)
 
 # La consola de Windows usa cp1252 y revienta con acentos combinantes
 # (NFD) que vienen en algunos titulos de Blackboard.
@@ -125,7 +126,7 @@ def cursos_con_zoom(filtro):
         raise SystemExit("Sesion vencida. Corre: python3 sesion.py")
     uid = r.json()["id"]
 
-    out = []
+    out, con_zoom = [], []
     d = s.get(f"{HOST}/learn/api/v1/users/{uid}/memberships",
               params={"expand": "course", "limit": 100}, timeout=30).json()
     time.sleep(0.7)
@@ -157,7 +158,9 @@ def cursos_con_zoom(filtro):
             href = next((l.get("href") for l in it.get("links") or []
                          if l.get("rel") == "alternate"), None)
             out.append((c["id"], nom, href, it.get("id")))
+            con_zoom.append(c)
             break
+    registrar_cursos(s, HOST, con_zoom)  # semestre y profesor, para la ruta del Banco
     return out
 
 
@@ -481,7 +484,8 @@ if a.fusionar:
 if a.descargar and (SALIDA / "zoom.csv").exists():
     with (SALIDA / "zoom.csv").open(encoding="utf-8-sig") as fh:
         filas = [f for f in csv.DictReader(fh)
-                 if not a.curso or a.curso.lower() in f["curso"].lower()]
+                 if (not a.curso or a.curso.lower() in f["curso"].lower())
+                 and (not a.desde or (f.get("visto") or "") >= a.desde)]
     print(f"{len(filas)} grabaciones en el catalogo\n")
 else:
     cursos = cursos_con_zoom(a.curso)
