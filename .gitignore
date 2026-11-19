@@ -1,0 +1,26 @@
+# Credenciales y sesiones: nunca al repo
+.env
+.env-*
+.perfil-chrome*/
+estado.json
+
+# Datos personales y de cursos
+salida*/
+descargas/
+logs/
+entregas/
+banco.json
+*.csv
+*.json
+
+# Basura local
+__pycache__/
+*.pyc
+*.antes-*
+*.parcial
+*.part
+probe*.py
+diff*.py
+ver*.py
+chk.py
+emb.py
